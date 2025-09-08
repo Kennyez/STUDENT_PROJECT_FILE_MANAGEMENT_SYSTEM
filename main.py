@@ -7,7 +7,6 @@ import shutil
 import os
 import sqlite3
 from datetime import datetime
-from matplotlib.pylab import delete
 import re
 # PATH = os.getcwd()
 class Database:
@@ -38,14 +37,13 @@ class Database:
                 )
         """)
  #เก็บข้อมูลนักศึกษาและส่งไปบันทึกในฐานข้อมูล
-class Student: 
+class Student(Database): 
     # def __init__(self,student_name = None,student_id = None,student_email = None):
     def __init__(self):
+        super().__init__()
         # self.__student_name = student_name
         # self.__student_id = student_id
         # self.__student_email = student_email
-        self.conn = sqlite3.connect('Data.sqlite3')
-        self.c = self.conn.cursor()
 
     #Method รับข้อมูลนักศึกษาและบันทึกลงฐานข้อมูล
     def New_Student(self,student_name,student_id,student_email):
@@ -72,18 +70,22 @@ class Student:
         with self.conn:
             self.c.execute("SELECT 1 FROM Student WHERE Email = ?", (student_email,))
             return self.c.fetchone() is not None
+    
+    def check_student_id(self,student_id):
+        with self.conn:
+            self.c.execute("SELECT 1 FROM Student WHERE Student_id = ?", (student_id,))
+            return self.c.fetchone() is not None
 
 
  #เก็บข้อมูลโครงการและส่งไปบันทึกในฐานข้อมูล
-class Project(Student): 
+class Project(Database): 
     # def __init__(self, project_name = None, description = None, year = None, **kwargs):
     def __init__(self):
+        super().__init__()
         # super().__init__(project_name,description,year,**kwargs)
         # self.__project_name = project_name
         # self.description = description
         # self.year = year
-        self.conn = sqlite3.connect('Data.sqlite3')
-        self.c = self.conn.cursor()
 
     #Method รับข้อมูลโครงการและบันทึกลงฐานข้อมูล
     def New_Project(self, project_name, description, year, student_name, student_id):
@@ -104,7 +106,7 @@ class Project(Student):
         with self.conn:
             self.c.execute("SELECT 1 FROM Project WHERE Project_name = ?", (project_name,))
             return self.c.fetchone() is not None
-
+  
     #สร้างโฟลเดอร์ของโครงการหลังสร้างโครงการใหม่
     def create_project(self, project_name, parent_folder="Project_list"):
         if parent_folder:
@@ -113,47 +115,43 @@ class Project(Student):
             path = project_name
         if not os.path.exists(path):
             os.makedirs(path)
-            print(f"สร้างโฟลเดอร์สำหรับ {project_name} เสร็จสิ้น.")
+            print(f"สร้างโฟลเดอร์สำหรับ {project_name} แล้ว.")
         else:
             print(f"มี '{project_name}' อยู่แล้ว.")
 
     
 
 #ติดต่อฐานข้อมูล
-class Database_manager(): 
+class Database_manager(Database): 
     def __init__(self):
-        self.conn = sqlite3.connect('Data.sqlite3')
-        self.c = self.conn.cursor()
-    # ดึงข้อมูลนักศึกษาทั้งหมด
-    def fetch_Students(self):   
-        self.c.execute("SELECT * FROM Student")
-        print(self.c.fetchall())
-        return self.c.fetchall()
-    
-    # ดึงข้อมูลโปรเจกต์ทั้งหมด
-    def fetch_Projects(self):
+        super().__init__()
+
+    def fetch_Students(self):
         # self.c.execute("SELECT * FROM Project")
-        self.c.execute("""SELECT Student.Student_name, Student.Student_id, Student.Email, Project.Project_name, Project.Year
-            FROM Project
-            JOIN Student ON Project.Student_id = Student.Student_id
+        self.c.execute("""SELECT Student.Student_name, Student.Student_id, Student.Email, Student.ID
+            FROM Student
         """)
         # print(self.c.fetchall())
         # return self.c.fetchall()
         results = self.c.fetchall()
         if results:
-            for student_name, student_id, email, project_name, year in results:
+            for student_name, student_id, email ,ID in results:
                 print("-" * 100)
-                print(f"ชื่อโครงการ: {project_name}, เจ้าของโครงการ: {student_name}, รหัสนักศึกษา: {student_id}, Email: {email}, ปี: {year}")
-                
-        
-    # def fetch_student_projects(self):
-    #     # ดึงข้อมูลโปรเจกต์ พร้อมข้อมูลต่างๆ
-    #     self.c.execute("""
-    #         SELECT Student.Student_name, Student.Email, Project.Project_name, Project.Year
-    #         FROM Project
-    #         JOIN Student ON Project.Student_id = Student.Student_id
-    #     """)
-    #     return self.c.fetchall()
+                print(f"ID: {ID}, ชื่อ: {student_name}, รหัสนักศึกษา: {student_id}, Email: {email}")
+    
+    # ดึงข้อมูลโปรเจกต์ทั้งหมด
+    def fetch_Projects(self):
+        # self.c.execute("SELECT * FROM Project")
+        self.c.execute("""SELECT Student.Student_name, Student.Student_id, Student.Email, Project.Project_name, Project.Year, Project.ID
+            FROM Project
+            JOIN Student ON Project.Student_id = Student.Student_id
+        """)
+
+        results = self.c.fetchall()
+        if results:
+            for student_name, student_id, email, project_name, year, ID in results:
+                print("-" * 100)
+                print(f"ID: {ID}, ชื่อโครงการ: {project_name}, เจ้าของโครงการ: {student_name}, รหัสนักศึกษา: {student_id}, Email: {email}, ปี: {year}")
 
     #ค้นหาข้อมูลโครงการ
     def search_project(self, Keyword): 
@@ -189,13 +187,23 @@ class Database_manager():
             print(f"เปิดไฟล์ของโครงการ {project_name}")
         else:
             print(f"ไม่พบไฟล์ของโครงการ {project_name}")
+        
+    def get_studentinfo_by_id(self, student_id):
+        self.c.execute("SELECT Student_name FROM Student WHERE Student_id=?", (student_id,))
+        result = self.c.fetchall()  # คืนค่า Student_name หรือ None ถ้าไม่เจอ
+        if result:  
+            return result[0][0] # เอาแค่แถวแรก, คอลัมน์แรก
+    def get_Projectinfo_by_id(self, project_id):
+        self.c.execute("SELECT Project_name FROM Project WHERE ID=?", (project_id,))
+        result = self.c.fetchall()  # คืนค่า Project_name หรือ None ถ้าไม่เจอ
+        if result:  
+            return result[0][0]
 
 #classของ adminไว้แก้ไขข้อมูลใน database
-class Admin(): 
+class Admin(Database): 
     def __init__(self,pin = "1111"): #กำหนด pin คือ 1111
+        super().__init__()
         self.__pin = pin
-        self.conn = sqlite3.connect('Data.sqlite3')
-        self.c = self.conn.cursor()
 
     #ตรวจสอบpin 
     def check_pin(self,input_pin):
@@ -211,10 +219,10 @@ class Admin():
         self.conn.commit()
 
     #อัพเดตข้อมูลนักศึกษาในฐานข้อมูล
-    def update_Student_Data(self,student_name,student_id,student_email,ID): #ฟังชัน อัปเดตข้อมูลในตาราง Student
+    def update_Student_Data(self,new_student_name,new_student_id,new_student_email,ID): #ฟังชัน อัปเดตข้อมูลในตาราง Student
         with self.conn:
             command = 'UPDATE Student SET Student_name = ?, Student_id = ?, Email = ? WHERE ID = ?'
-            self.c.execute(command,(student_name,student_id,student_email,ID))
+            self.c.execute(command,(new_student_name,new_student_id,new_student_email,ID))
         self.conn.commit()
 
     #ลบข้อมูลโครงการออกจากฐานข้อมูล
@@ -223,7 +231,6 @@ class Admin():
             command = 'DELETE FROM Project WHERE ID=(?)'
             self.c.execute(command,([ID]))
         self.conn.commit()
-        print("ลบข้อมูลโครงการเรียบร้อยแล้ว")
 
     #ลบข้อมูลนักศึกษาออกจากฐานข้อมูล
     def Delete_Student_data (self, ID):
@@ -234,7 +241,7 @@ class Admin():
         print("ลบข้อมูลนักศึกษาเรียบร้อยแล้ว")
     
 #ไว้อัพโหลดไฟล์ต่างๆ
-class Uploadfile:
+class UploadFile:
     def __init__(self,Project_name):
 
         #กำหนดรูปแบบของ GUI
@@ -266,6 +273,43 @@ class Uploadfile:
         self.label.config(text=f"อัปโหลดไฟล์: {os.path.basename(file_path)} เสร็จสิ้น")
         print(f"ไฟล์ {os.path.basename(file_path)} ถูกอัปโหลดไปที่ {PATH}/{path}")
 
+class ProjectFileManager:
+    def __init__(self, parent_folder="Project_list"):
+        self.parent_folder = parent_folder
+
+    def delete_project_folder(self, project_name):
+        path = os.path.join(self.parent_folder, project_name)
+        if os.path.exists(path) and os.path.isdir(path):
+            shutil.rmtree(path)
+            print(f"ลบโฟลเดอร์ {project_name} เรียบร้อยแล้ว")
+        else:
+            print(f"ไม่พบโฟลเดอร์ของโครงการ {project_name}")
+
+    def delete_file_in_project(self, project_name, filename):
+        file_path = os.path.join(self.parent_folder, project_name, filename)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            os.remove(file_path)
+            print(f"ลบไฟล์ {filename} ในโครงการ {project_name} เรียบร้อยแล้ว")
+        else:
+            print(f"ไม่พบไฟล์ {filename} ในโครงการ {project_name}")
+
+    def list_files_in_project(self, project_name):
+        folder_path = os.path.join(self.parent_folder, project_name)
+        if os.path.exists(folder_path) and os.path.isdir(folder_path):
+            files = os.listdir(folder_path)
+            if files:
+                print(f"ไฟล์ทั้งหมดในโครงการ {project_name}:")
+                for f in files:
+                    print(" -", f)
+                return files
+            else:
+                print(f"โครงการ {project_name} ยังไม่มีไฟล์")
+                return []
+        else:
+            print(f"ไม่พบโฟลเดอร์ของโครงการ {project_name}")
+            return None
+
+
 #เรียกใช้งาน
 def main():
 
@@ -274,39 +318,60 @@ def main():
         action = input(
             "---------------------------------------- \n"
             "ระบบจัดเก็บไฟล์โครงการของนักศึกษา \n"            
-            "[1] เพิ่มโครงการใหม่ (ชื่อ เลขประจำตัว ) \n"   #(ชื่อ รหัสนักศึกษา )
-            "[2] ใส่ข้อมูลในโครงการ \n"                  #( [ ลงในที่สร้างจาก 1 ] ใส่แค่ชื่อโปคเจค รายะเอียด ปี)
-            "[3] เพิ่มไฟล์ \n"                          #( [ ลงในที่สร้างจาก 1 ] รูป เอกสาร)
-            "[4] ค้นหาข้อมูลโครงการ \n"            #(แสดงชื่อโครงการ ชื่อเจ้าของโครงการ รหัสนักศึกษา Email ปี)
-            "[5] เรียกดูไฟล์โครงการ\n"
-            "[6] ตัวเลือกแอดมิน \n"
-            "[7] ยกเลิก \n"
+            "[1] เพิ่มข้อมูลนักศึกษา \n"   #(ชื่อ รหัสนักศึกษา )
+            "[2] เพิ่มโครงการใหม่ \n"                  #( [ ลงในที่สร้างจาก 1 ] ใส่แค่ชื่อโปคเจค รายะเอียด ปี)
+            "[3] จัดการไฟล์ \n"                         #(เลือกโครงการที่สร้างจาก 2 แล้วเพิ่มไฟล์เข้าไป)                         
+            "[4] แก้ไขข้อมูล \n"                          
+            "[5] ค้นหาข้อมูลโครงการ \n"            #(แสดงชื่อโครงการ ชื่อเจ้าของโครงการ รหัสนักศึกษา Email ปี)
+            "[6] เรียกดูไฟล์โครงการ\n"
+            "[7] ตัวเลือกแอดมิน \n"
+            "[8] ยกเลิก \n"
             "---------------------------------------- \n"
             "เลือกรายการที่ต้องการ: "
             )
 
-        if not action.isdigit() or int(action) not in range(1, 8):
-            print("Error: กรุณาเลือกรายการให้ถูกต้อง")
+        if not action.isdigit() or int(action) not in range(1, 9):
+            print("เกิดข้อผิดพลาด: กรุณาเลือกรายการให้ถูกต้อง")
             continue
-            
+
         if action == '1':
+            print("-"*40)
+            NewStudent = Student()
+            StudentData = Database_manager()
+
+            input_name = input("Enter Student Name: ")
+            input_student_id = input("Enter Student ID: ")
+            if NewStudent.check_student_id(input_student_id):
+                print("รหัสนักศึกษานี้มีอยู่แล้ว")
+                continue
+            input_email = input("Enter Student Email: ")
+            if not NewStudent.is_valid_email(input_email):
+                print("รูปแบบอีเมลไม่ถูกต้อง")
+                continue
+            if NewStudent.check_email(input_email):
+                print("Email นี้มีอยู่แล้ว")
+                continue
+            NewStudent.New_Student(input_name, input_student_id, input_email)
+            StudentData.fetch_Students()
+
+        elif action == '2':
             while True:
                 print("-"*40)
-                NewStudent = Student()
                 NewProject = Project()
+                ProjectData = Database_manager()
+                check = Student()
 
-                input_name = input("Enter Student Name: ")
-                input_student_id = input("Enter Student ID: ")
-                input_email = input("Enter Student Email: ")
-                if not NewStudent.is_valid_email(input_email):
-                    print("รูปแบบอีเมลไม่ถูกต้อง")
+                input_student_id2 = input("Enter Student ID: ")
+                if not check.check_student_id(input_student_id2):
+                    print("ไม่พบรหัสนักศึกษานี้ในระบบ กรุณาเพิ่มข้อมูลนักศึกษาก่อน")
                     continue
-                if NewStudent.check_email(input_email):
-                    print("Email นี้มีอยู่แล้ว")
+                student_info = ProjectData.get_studentinfo_by_id(input_student_id2)
+                if not student_info:
+                    print("❌ ไม่พบนักศึกษาที่มีรหัสนี้")
                     continue
 
+                input_student_name = student_info
                 input_project_name = input("Enter Project Name: ")
-
                 if NewProject.check_Project_name(input_project_name):
                     print("Project นี้มีอยู่แล้ว")
                     continue
@@ -314,63 +379,70 @@ def main():
                 input_description = input("Enter Project Description: ")
                 input_year = input("Enter Academic Year: ")
 
-                NewStudent.New_Student(input_name, input_student_id, input_email)
-                NewProject.New_Project(input_project_name, input_description, input_year, input_name, input_student_id)
+                NewProject.New_Project(input_project_name, input_description, input_year, input_student_name, input_student_id2)
                 NewProject.create_project(input_project_name)
-                test = Database_manager()
-                test.fetch_Students()
-                test.fetch_Projects()
+
+                ProjectData.fetch_Projects()
                 break
 
-        elif action == '2':
-            print("-"*40)
-            
         elif action == '3':
-            show_Projects_info = Database_manager()
-            CheckProject = Project()
-            show_Projects_info.fetch_Projects()
-            input_upload_Project_name = input("Enter Project Name to upload file: ")
-            if not CheckProject.check_Project_name(input_upload_Project_name):
-                print(f"ไม่พบโครงการ {input_upload_Project_name} ในระบบ")
-                continue
-            Uploadfile(input_upload_Project_name)
+            while True:
+                show_Projects_info = Database_manager()
+                CheckProject = Project()
+                ManageFile = ProjectFileManager()
+
+                managefile_action = input(
+                    "---------------------------------------- \n"
+                    "เลือกรายการที่ต้องการ \n"
+                    "[1] อัปโหลดไฟล์ \n"
+                    "[2] ลบไฟล์ในโฟลเดอร์ \n"
+                    "[3] ออก \n"
+                    "---------------------------------------- \n"
+                    "เลือกรายการที่ต้องการ: "
+                )
+                if not managefile_action.isdigit() or int(managefile_action) not in range(1, 5):
+                        print("Error: กรุณาเลือกรายการให้ถูกต้อง")
+                        continue
+                
+                if managefile_action == '1': 
+                    show_Projects_info.fetch_Projects()
+                    input_upload_Project_name = input("Enter Project Name to upload file: ")
+                    if not CheckProject.check_Project_name(input_upload_Project_name):
+                        print(f"ไม่พบโครงการ {input_upload_Project_name} ในระบบ")
+                        continue
+                    UploadFile(input_upload_Project_name)
+                elif managefile_action == '2':
+                    show_Projects_info.fetch_Projects()
+                    input_project_name = input("Enter Project Name to Delete files: ")
+                    ManageFile.list_files_in_project(input_project_name)
+                    input_filename = input("Enter filename to delete: ")
+                    ManageFile.delete_file_in_project(input_project_name,input_filename)
+            
+
+                
+                elif managefile_action == '3':
+                        print("ออกจาก [ จัดการไฟล์ ]")
+                        break
 
         elif action == '4':
-            print("-"*40)
-            input_keyword = input("ใส่ชื่อโครงการ หรือ รหัสนักศึกษา  : ")
-            Search = Database_manager()
-            Search.search_project(input_keyword)
-
-        elif action == '5':
-            print("-"*40)
-            Search = Database_manager()
-            Search.fetch_Projects()
-            input_open_Project_name = input("ใส่ชื่อโครงการที่ต้องการดูไฟล์: ")
-            Search.open_project_file(input_open_Project_name)
-
-        elif action == '6':
-            input_PIN = input("Enter Admin PIN: ")
-            admin = Admin()
-            if admin.check_pin(input_PIN):
-                while True:
+            while True:
                     
-                    admin_action = input(
+                    edit_action = input(
                         "---------------------------------------- \n"
                         "เลือกรายการที่ต้องการแก้ไข \n"
                         "[1] แก้ไขข้อมูลนักศึกษา \n"
                         "[2] แก้ไขข้อมูลโครงการ \n"
-                        "[3] ลบข้อมูลนักศึกษา \n"
-                        "[4] ลบข้อมูลโครงการ \n"
-                        "[5] ออก \n"
+                        "[3] ลบไฟล์ในโฟลเดอร์ \n"
+                        "[4] ออก \n"
 
                         "---------------------------------------- \n"
                         "เลือกรายการที่ต้องการ: "
                     )
-                    if not admin_action.isdigit() or int(admin_action) not in range(1, 6):
+                    if not edit_action.isdigit() or int(edit_action) not in range(1, 5):
                         print("Error: กรุณาเลือกรายการให้ถูกต้อง")
                         continue
 
-                    if admin_action == '1':
+                    if edit_action == '1':
                         print("-"*40)
                         admin1 = Database_manager()
                         admin2 = Admin()
@@ -384,43 +456,89 @@ def main():
                         print("อัปเดตข้อมูลนักศึกษาเรียบร้อยแล้ว")
                         print("-"*40)
 
-                    elif admin_action == '2':
+                    elif edit_action == '2':
                         print("-"*40)
                         admin1 = Database_manager()
                         admin2 = Admin()
                         admin1.fetch_Projects()
                         input_id2 = input("Enter Project ID to update: ")
-                        new_project_name = input("Enter new Project Name: ")
-                        new_description = input("Enter new Description: ")
-                        new_year = input("Enter new Year: ")
-                        admin2.update_Project_Data(new_project_name, new_description, new_year, input_id2)
+                        input_new_project_name = input("Enter new Project Name: ")
+                        input_new_description = input("Enter new Description: ")
+                        input_new_year = input("Enter new Year: ")
+                        admin2.update_Project_Data(input_new_project_name, input_new_description, input_new_year, input_id2)
                         admin1.fetch_Projects()
                         print("อัปเดตข้อมูลโครงการเรียบร้อยแล้ว")
                         print("-"*40)
 
-                    elif admin_action == '3':
+                    elif edit_action == '3':
+                        print("asd")
+
+                    elif edit_action == '4':
+                        print("ออกจากโหมดแอดมิน")
+                        break
+
+        elif action == '5':
+            print("-"*40)
+            input_keyword = input("ใส่ชื่อโครงการ หรือ รหัสนักศึกษา  : ")
+            Search = Database_manager()
+            Search.search_project(input_keyword)
+
+        elif action == '6':
+            print("-"*40)
+            Search = Database_manager()
+            Search.fetch_Projects()
+            input_open_Project_name = input("ใส่ชื่อโครงการที่ต้องการดูไฟล์: ")
+            Search.open_project_file(input_open_Project_name)
+
+        elif action == '7':
+            input_PIN = input("Enter Admin PIN: ")
+            admin = Admin()
+            if admin.check_pin(input_PIN):
+                while True:
+                    admin1 = Database_manager()
+                    admin2 = Admin()
+                    admin3 = ProjectFileManager()
+                    admin_action = input(
+                        "---------------------------------------- \n"
+                        "เลือกรายการที่ต้องการแก้ไข \n"
+                        "[1] ลบข้อมูลนักศึกษา \n"
+                        "[2] ลบข้อมูลโครงการ \n"
+                        "[3] ออก \n"
+                        "---------------------------------------- \n"
+                        "เลือกรายการที่ต้องการ: "
+                    )
+                    if not admin_action.isdigit() or int(admin_action) not in range(1, 4):
+                        print("Error: กรุณาเลือกรายการให้ถูกต้อง")
+                        continue
+
+                    elif admin_action == '1':
                         print("-"*40)
-                        admin1 = Database_manager()
-                        admin2 = Admin()
+                        # admin1 = Database_manager()
+                        # admin2 = Admin()
                         admin1.fetch_Students()
                         input_id3 = input("Select ID to Delete: ")
                         admin2.Delete_Student_data(input_id3)
                         admin1.fetch_Students()
-                        print("ลบข้อมูลนักศึกษาเรียบร้อยแล้ว")
                         print("-"*40)
 
-                    elif admin_action == '4':
+                    elif admin_action == '2':
                         print("-"*40)
-                        admin1 = Database_manager()
-                        admin2 = Admin()
+                        # admin1 = Database_manager()
+                        # admin2 = Admin()
                         admin1.fetch_Projects()
                         input_id4 = input("Select ID to Delete: ")
+                        delete_project_name = admin1.get_Projectinfo_by_id(input_id4)
+                        # delete_project_name = project_info
                         admin2.Delete_Project_data(input_id4)
+                        admin3.delete_project_folder(delete_project_name)
                         admin1.fetch_Projects()
-                        print("ลบข้อมูลโครงการเรียบร้อยแล้ว")
+                        print(f"ลบข้อมูลกับโฟลเดอร์ของโครงการ {delete_project_name} เรียบร้อยแล้ว")
+
+
+
                         print("-"*40)
 
-                    elif admin_action == '5':
+                    elif admin_action == '3':
                         print("ออกจากโหมดแอดมิน")
                         break
 
@@ -430,7 +548,7 @@ def main():
                 print("รหัสผ่านไม่ถูกต้อง")
                 continue
 
-        elif action == '7':
+        elif action == '8':
 
             print("-"*40)
             print("จบการทำงาน")
