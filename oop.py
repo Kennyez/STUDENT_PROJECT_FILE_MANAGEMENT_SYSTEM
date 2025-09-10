@@ -10,12 +10,14 @@ from datetime import datetime
 import re
 # PATH = os.getcwd()
 class Database:
-    def __init__(self):
-        self.conn = sqlite3.connect('Data.sqlite3') #สร้างฐานข้อมูล
+    def __init__(self, db_name="Data.sqlite3"):
+        self.conn = sqlite3.connect(db_name) #สร้างฐานข้อมูล
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.c = self.conn.cursor()
+        self.create_tables()
 
         #สร้างตาราง Student ในฐานข้อมูล
+    def create_tables(self):
         self.c.execute("""                        
             CREATE TABLE IF NOT EXISTS Student (
                 ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,92 +34,93 @@ class Database:
                     Description TEXT,
                     Owner TEXT,
                     Student_id INTEGER,
-                    Year INTEGER,
+                    Year REAL,
                     FOREIGN KEY(Student_id) REFERENCES Student(Student_id)
                 )
         """)
+        self.conn.commit()
+
  #เก็บข้อมูลนักศึกษาและส่งไปบันทึกในฐานข้อมูล
-class Student(Database): 
+class Student: 
     # def __init__(self,student_name = None,student_id = None,student_email = None):
-    def __init__(self):
-        super().__init__()
-        # self.__student_name = student_name
-        # self.__student_id = student_id
-        # self.__student_email = student_email
+    def __init__(self,db, student_name=None, student_id=None, student_email=None,**kwargs):
+        self.db = db
+        self.student_name = student_name
+        self.student_id = student_id
+        self.student_email = student_email
 
     #Method รับข้อมูลนักศึกษาและบันทึกลงฐานข้อมูล
-    def New_Student(self,student_name,student_id,student_email):
+    def New_Student(self):
         try:
-            with self.conn:
+            with self.db.conn:
                 #  เพิ่มข้อมูลนักศึกษาในตาราง Student
                 command1 = '''
                     INSERT INTO Student (Student_name, Student_id, Email) VALUES (?,?,?)
                 '''
-                self.c.execute(command1, (student_name, student_id, student_email))
-            self.conn.commit()
-            print(f"สร้างเพิ่มข้อมูลนักศึกษาของ {student_name} เสร็จสิ้น")
+                self.db.c.execute(command1, (self.student_name, self.student_id, self.student_email))
+            self.db.conn.commit()
+            print(f"สร้างเพิ่มข้อมูลนักศึกษาของ {self.student_name} เสร็จสิ้น")
 
         except sqlite3.IntegrityError as e:
-            print("เกิดข้อผิดพลาด: ข้อมูลซ้ำหรือผิดพลาด ->", e)
+            print("เกิดข้อผิดพลาด: ", e)
 
     #ตรวจสอบรูปแบบอีเมล
-    def is_valid_email(self, email):
+    def is_valid_email(self):
         pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
-        return re.match(pattern, email) is not None
+        return re.match(pattern, self.student_email) is not None
     
     #เช็คอีเมลซ้ำหรือไม่
-    def check_email(self,student_email):
-        with self.conn:
-            self.c.execute("SELECT 1 FROM Student WHERE Email = ?", (student_email,))
-            return self.c.fetchone() is not None
+    def check_email(self):
+        with self.db.conn:
+            self.db.c.execute("SELECT 1 FROM Student WHERE Email = ?", (self.student_email,))
+            return self.db.c.fetchone() is not None
     
-    def check_student_id(self,student_id):
-        with self.conn:
-            self.c.execute("SELECT 1 FROM Student WHERE Student_id = ?", (student_id,))
-            return self.c.fetchone() is not None
+    def check_student_id(self):
+        with self.db.conn:
+            self.db.c.execute("SELECT 1 FROM Student WHERE Student_id = ?", (self.student_id,))
+            return self.db.c.fetchone() is not None
 
 
  #เก็บข้อมูลโครงการและส่งไปบันทึกในฐานข้อมูล
-class Project(Database): 
-    # def __init__(self, project_name = None, description = None, year = None, **kwargs):
-    def __init__(self):
-        super().__init__()
-        # super().__init__(project_name,description,year,**kwargs)
-        # self.__project_name = project_name
-        # self.description = description
-        # self.year = year
+class Project(Student): 
+    def __init__(self,db, project_name=None, description=None, year=None,student_id=None, student_name=None, **kwargs):
+        super().__init__(db,student_name, student_id, **kwargs)
+        self.project_name = project_name
+        self.description = description
+        self.year = year
+        self.db = db
 
     #Method รับข้อมูลโครงการและบันทึกลงฐานข้อมูล
-    def New_Project(self, project_name, description, year, student_name, student_id):
+    def New_Project(self):
         try:
-            with self.conn:
+            with self.db.conn:
                 #เพิ่มข้อมูลโปรเจกต์ พร้อมเชื่อมกับ student_id และ owner
                 command = '''
                     INSERT INTO Project (Project_name, Description, Year, Owner, Student_id) VALUES (?,?,?,?,?)
                 '''
-                self.c.execute(command, (project_name, description, year, student_name, student_id))
+                self.db.c.execute(command, (self.project_name, self.description, self.year, self.student_name, self.student_id))
 
-            self.conn.commit()
-            print(f"สร้างโครงการ {project_name} เสร็จสิ้น")
+            self.db.conn.commit()
+            print(f"สร้างโครงการ {self.project_name} เสร็จสิ้น")
         except sqlite3.IntegrityError as e:
-            print("เกิดข้อผิดพลาด: ข้อมูลซ้ำหรือผิดพลาด ->", e)
+            print("เกิดข้อผิดพลาด: ", e)
 
-    def check_Project_name(self, project_name):
-        with self.conn:
-            self.c.execute("SELECT 1 FROM Project WHERE Project_name = ?", (project_name,))
-            return self.c.fetchone() is not None
-  
+    def check_Project_name(self):
+        with self.db.conn:
+            self.db.c.execute("SELECT 1 FROM Project WHERE Project_name = ?", (self.project_name,))
+            return self.db.c.fetchone() is not None
+
     #สร้างโฟลเดอร์ของโครงการหลังสร้างโครงการใหม่
-    def create_project(self, project_name, parent_folder="Project_list"):
+    def create_project(self, parent_folder="Project_list"):
         if parent_folder:
-            path = os.path.join(parent_folder, project_name)
+            path = os.path.join(parent_folder, self.project_name)
         else:
-            path = project_name
+            path = self.project_name
         if not os.path.exists(path):
             os.makedirs(path)
-            print(f"สร้างโฟลเดอร์สำหรับ {project_name} แล้ว.")
+            print(f"สร้างโฟลเดอร์สำหรับ {self.project_name} แล้ว.")
         else:
-            print(f"มี '{project_name}' อยู่แล้ว.")
+            print(f"มี '{self.project_name}' อยู่แล้ว.")
 
     
 
@@ -312,9 +315,9 @@ class ProjectFileManager:
 
 #เรียกใช้งาน
 def main():
-
+    db = Database()
     while True:
-        Database() #สร้างฐานข้อมูล
+         #สร้างฐานข้อมูล
         action = input(
             "---------------------------------------- \n"
             "ระบบจัดเก็บไฟล์โครงการของนักศึกษา \n"            
@@ -336,35 +339,33 @@ def main():
 
         if action == '1':
             print("-"*40)
-            NewStudent = Student()
+            # NewStudent = Student()
             StudentData = Database_manager()
 
             input_name = input("Enter Student Name: ")
             input_student_id = input("Enter Student ID: ")
-            if NewStudent.check_student_id(input_student_id):
+            input_email = input("Enter Student Email: ")
+            NewStudent = Student(db,input_name, input_student_id, input_email)
+            if NewStudent.check_student_id():
                 print("รหัสนักศึกษานี้มีอยู่แล้ว")
                 continue
-            input_email = input("Enter Student Email: ")
-            if not NewStudent.is_valid_email(input_email):
+            if not NewStudent.is_valid_email():
                 print("รูปแบบอีเมลไม่ถูกต้อง")
                 continue
-            if NewStudent.check_email(input_email):
+            if NewStudent.check_email():
                 print("Email นี้มีอยู่แล้ว")
                 continue
-            NewStudent.New_Student(input_name, input_student_id, input_email)
+            NewStudent.New_Student()
             StudentData.fetch_Students()
 
         elif action == '2':
             while True:
                 print("-"*40)
-                NewProject = Project()
+                # NewProject = Project()
                 ProjectData = Database_manager()
-                check = Student()
+                # check = Student(db)
 
                 input_student_id2 = input("Enter Student ID: ")
-                if not check.check_student_id(input_student_id2):
-                    print("ไม่พบรหัสนักศึกษานี้ในระบบ กรุณาเพิ่มข้อมูลนักศึกษาก่อน")
-                    continue
                 student_info = ProjectData.get_studentinfo_by_id(input_student_id2)
                 if not student_info:
                     print("❌ ไม่พบนักศึกษาที่มีรหัสนี้")
@@ -372,15 +373,22 @@ def main():
 
                 input_student_name = student_info
                 input_project_name = input("Enter Project Name: ")
-                if NewProject.check_Project_name(input_project_name):
+                input_description = input("Enter Project Description: ")
+                input_year = input("Enter Academic Year: ")
+                NewProject = Project(db,input_project_name, input_description, input_year,input_student_id2,input_student_name)
+
+                check_student = Student(db, student_id=input_student_id2)
+                if not check_student.check_student_id():
+                    print("ไม่พบรหัสนักศึกษานี้ในระบบ กรุณาเพิ่มข้อมูลนักศึกษาก่อน")
+                    continue
+                
+                if NewProject.check_Project_name():
                     print("Project นี้มีอยู่แล้ว")
                     continue
 
-                input_description = input("Enter Project Description: ")
-                input_year = input("Enter Academic Year: ")
 
-                NewProject.New_Project(input_project_name, input_description, input_year, input_student_name, input_student_id2)
-                NewProject.create_project(input_project_name)
+                NewProject.New_Project()
+                NewProject.create_project()
                 ProjectData.fetch_Projects()
                 break
 
