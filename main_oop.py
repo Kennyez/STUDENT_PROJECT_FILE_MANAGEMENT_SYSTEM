@@ -6,9 +6,9 @@ from tkinter import filedialog, ttk, Tk
 import shutil
 import os
 import sqlite3
-from datetime import datetime
 import re
-from send2trash import send2trash 
+from send2trash import send2trash # py -m pip install send2trash
+from PIL import Image, ImageTk # py -m pip install Pillow
 class Database:
     def __init__(self, db_name="Data.sqlite3"):
         self.conn = sqlite3.connect(db_name) #สร้างฐานข้อมูล
@@ -42,7 +42,6 @@ class Database:
 
  #เก็บข้อมูลนักศึกษาและส่งไปบันทึกในฐานข้อมูล
 class Student: 
-    # def __init__(self,student_name = None,student_id = None,student_email = None):
     def __init__(self,db, student_name, student_id, student_email):
         self.db = db
         self.student_name = student_name
@@ -110,19 +109,27 @@ class Project(Student):
             self.db.c.execute("SELECT 1 FROM Project WHERE Project_name = ?", (self.project_name,))
             return self.db.c.fetchone() is not None
 
-    #สร้างโฟลเดอร์ของโครงการหลังสร้างโครงการใหม่
     def create_project(self, parent_folder="Project_list"):
+        """สร้างโฟลเดอร์โปรเจคแยกตามรหัสนักศึกษา"""
         if parent_folder:
-            path = os.path.join(parent_folder, self.project_name)
+            # สร้างโครงสร้าง: Project_list/Student_ID/Project_name
+            student_folder = os.path.join(parent_folder, str(self.student.student_id))
+            project_path = os.path.join(student_folder, self.project_name)
         else:
-            path = self.project_name
-        if not os.path.exists(path):
-            os.makedirs(path)
-            print(f"สร้างโฟลเดอร์สำหรับ {self.project_name} แล้ว.")
+            student_folder = str(self.student.student_id)
+            project_path = os.path.join(student_folder, self.project_name)
+        
+        # สร้างโฟลเดอร์รหัสนักศึกษาก่อนถ้ายังไม่มี
+        if not os.path.exists(student_folder):
+            os.makedirs(student_folder)
+            print(f"สร้างโฟลเดอร์สำหรับนักศึกษา {self.student.student_id} แล้ว")
+        
+        # สร้างโฟลเดอร์โปรเจค
+        if not os.path.exists(project_path):
+            os.makedirs(project_path)
+            print(f"สร้างโฟลเดอร์โปรเจค '{self.project_name}' ในโฟลเดอร์ของนักศึกษา {self.student.student_id} แล้ว")
         else:
-            print(f"มี '{self.project_name}' อยู่แล้ว.")
-
-    
+            print(f"มีโฟลเดอร์โปรเจค '{self.project_name}' อยู่แล้ว")
 
 #ติดต่อฐานข้อมูล
 class Database_manager(Database): 
@@ -133,8 +140,6 @@ class Database_manager(Database):
         self.c.execute("""SELECT Student.Student_name, Student.Student_id, Student.Email, Student.ID
             FROM Student
         """)
-        # print(self.c.fetchall())
-        # return self.c.fetchall()
         results = self.c.fetchall()
         if results:
             for student_name, student_id, email ,ID in results:
@@ -150,10 +155,8 @@ class Database_manager(Database):
             print("-" * 40)
             print(f"ชื่อ: {result[0][0]}, รหัสนักศึกษา: {result[0][1]}, Email: {result[0][2]}")
             
-
     # ดึงข้อมูลโปรเจกต์ทั้งหมด
     def fetch_AllProjects(self):
-        # self.c.execute("SELECT * FROM Project")
         self.c.execute("""SELECT Student.Student_name, Student.Student_id, Student.Email, Project.Project_name, Project.Year, Project.ID, Project.Description
             FROM Project
             JOIN Student ON Project.Student_id = Student.Student_id
@@ -190,16 +193,15 @@ class Database_manager(Database):
             print(f"ไม่พบข้อมูลของโครงการ {Keyword}")
 
     #เรียกดูไฟล์ของโครงการที่ต้องการ
-    def open_project_file(self, project_name,parent_folder="Project_list"):
-        if parent_folder:
-            path = os.path.join(parent_folder, project_name)
-        else:
-            path = project_name
+    def open_project_file(self, project_name, student_id, parent_folder="Project_list"):
+        """เปิดไฟล์โปรเจค (รองรับโครงสร้างใหม่)"""
+        path = os.path.join(parent_folder, str(student_id), project_name)
+        
         if os.path.exists(path):
             os.startfile(path)
-            print(f"เปิดไฟล์ของโครงการ {project_name}")
+            print(f"เปิดไฟล์ของโปรเจค {project_name}")
         else:
-            print(f"ไม่พบไฟล์ของโครงการ {project_name}")
+            print(f"ไม่พบไฟล์ของโปรเจค {project_name} ของนักศึกษา {student_id}")
         
     def get_studentname_by_id(self, student_id):
         self.c.execute("SELECT Student_name FROM Student WHERE Student_id=?", (student_id,))
@@ -234,9 +236,9 @@ class Database_manager(Database):
         for i, pj_name in enumerate(list_pf, start=1): #ได้ทั้ง index และ value ใน loop เดียว
             print(f"[{i}]โครงการ: {pj_name[0]}")
         while True:
-            # ให้เลือก
+            #เลือกโปรที่ต้องการ
             try:
-                choice = int(input("เลือกหมายเลขโปรเจคที่ต้อง: "))
+                choice = int(input("เลือกหมายเลขโครงการที่ต้องอัปโหลด: "))
                 if choice < 1:
                     print("หมายเลขต้องไม่น้อยกว่า 1")
                     continue
@@ -255,8 +257,15 @@ class Database_manager(Database):
     def check_last_4_ID(self,Keyword):
         self.c.execute("SELECT Student_id FROM Student WHERE Student.Student_id LIKE ?",('%' + Keyword ,))
         return  self.c.fetchall()
+    
+    #ดึง student_id จากชื่อโปรเจค
+    def get_student_id_by_project_name(self, project_name):
+        self.c.execute("SELECT Student_id FROM Project WHERE Project_name = ?", (project_name,))
+        result = self.c.fetchone()
+        if result:
+            return result[0]
+        return None
 
-#classของ adminไว้แก้ไขข้อมูลใน database
 class Admin(): 
     def __init__(self, db, pin = "1111",**kwargs): #กำหนด pin คือ 1111
         super().__init__(**kwargs)
@@ -270,22 +279,22 @@ class Admin():
             return True
         
     #อัพเดตข้อมูลโครงการในฐานข้อมูล
-    def update_Project_Data(self,project_name,description,year,pjname): #ฟังชัน อัปเดตข้อมูลในตาราง Project
+    def update_Project_Data(self,project_name,description,year,pjname): 
         with self.db.conn:
             command = 'UPDATE Project SET Project_name = ?, Description = ?, Year = ? WHERE Project_name = ?'
             self.db.c.execute(command,(project_name,description,year,pjname))
         self.db.conn.commit()
 
     #อัพเดตข้อมูลนักศึกษาในฐานข้อมูล
-    def update_Student_Data(self,new_student_name,new_student_id,new_student_email, old_student_id): #ฟังชัน อัปเดตข้อมูลในตาราง Student
+    def update_Student_Data(self,new_student_name,new_student_id,new_student_email, old_student_id):
         with self.db.conn:
             command = ('UPDATE Student SET Student_name = ?, Student_id = ?, Email = ? WHERE Student_id LIKE ?')
             cursor = self.db.c.execute(command,(new_student_name, new_student_id, new_student_email, old_student_id))
         self.db.conn.commit()
         if cursor.rowcount == 0:
-            print(f"⚠️ ไม่พบรหัสนักศึกษา {old_student_id} ที่ต้องการอัปเดต")
+            print(f"ไม่พบรหัสนักศึกษา {old_student_id} ที่ต้องการอัปเดต")
         else:
-            print(f"✅ อัปเดตข้อมูลนักศึกษา {new_student_name} เรียบร้อย")
+            print(f"อัปเดตข้อมูลนักศึกษา {new_student_name} เรียบร้อย")
 
     #ลบข้อมูลโครงการออกจากฐานข้อมูล
     def Delete_Project_data (self, ID):
@@ -302,56 +311,88 @@ class Admin():
         self.db.conn.commit()
         print("ลบข้อมูลนักศึกษาเรียบร้อยแล้ว")
     
-#ไว้อัพโหลดไฟล์ต่างๆ
 class UploadFile:
-    def __init__(self,project_name, parent_folder="Project_list"):
-
-        #กำหนดรูปแบบของ GUI
+    def __init__(self, project_name, student_id, parent_folder="Project_list"):
         self.project_name = project_name
+        self.student_id = student_id
         self.parent_folder = parent_folder
         self.root = tk.Tk()
         self.root.title("Upload File")
         self.root.geometry("350x200")
-        self.label = ttk.Label(self.root, text="ยังไม่ได้เลือกไฟล์")
-        self.label.pack(pady=10)
-        self.btn_upload = ttk.Button(self.root, text="เลือกไฟล์", command=self.upload_file)
-        self.btn_upload.pack(pady=10)
+        try:
+            PATH = os.getcwd()  # หรือเส้นทางที่คุณใช้
+            icon_path = os.path.join(PATH, 'fupload.ico')
+            self.root.iconbitmap(icon_path)
+        except:
+            pass
+        try:
+            PATH = os.getcwd()
+            bg_path = os.path.join(PATH, 'background.jpg')  # หรือ .png
+            bg_image = Image.open(bg_path)
+            bg_image = bg_image.resize((350, 200))  # ปรับขนาดให้เท่ากับหน้าต่าง
+            self.bg_photo = ImageTk.PhotoImage(bg_image)
+            
+            # สร้าง Canvas สำหรับพื้นหลัง
+            self.canvas = tk.Canvas(self.root, width=350, height=200)
+            self.canvas.pack(fill="both", expand=True)
+            self.canvas.create_image(0, 0, anchor="nw", image=self.bg_photo)
+            
+            # ใส่ widget บน canvas
+            self.label = tk.Label(self.canvas, text="ยังไม่ได้เลือกไฟล์", 
+                                bg="lightblue", font=("Arial", 10))
+            self.canvas.create_window(175, 70, window=self.label)  # ตรงกลาง
+            
+            self.btn_upload = tk.Button(self.canvas, text="เลือกไฟล์", 
+                                      command=self.upload_file,
+                                      bg="lightblue", font=("Arial", 10))
+            self.canvas.create_window(175, 130, window=self.btn_upload)
+            
+        except Exception as e:
+                print(f"ไม่สามารถโหลดพื้นหลังได้: {e}")
+                # ใช้ GUI ธรรมดาแทน
+                self.label = ttk.Label(self.root, text="ยังไม่ได้เลือกไฟล์")
+                self.label.pack(pady=20)
+                self.btn_upload = ttk.Button(self.root, text="เลือกไฟล์", command=self.upload_file)
+                self.btn_upload.pack(pady=20)
+        # self.label = ttk.Label(self.root, text="ยังไม่ได้เลือกไฟล์")
+        # self.label.pack(pady=20)
+        # self.btn_upload = ttk.Button(self.root, text="เลือกไฟล์", command=self.upload_file)
+        # self.btn_upload.pack(pady=20)
         self.root.mainloop()
+        
 
-    #อัปโหลดไฟล์
+
     def upload_file(self):
-        # เปิด dialog ให้เลือกไฟล์
         file_path = filedialog.askopenfilename(
             title="เลือกไฟล์",
             filetypes=(("All files", "*.*"), ("Text files", "*.txt"))
         )
-
         if not file_path:
-            return  # ผู้ใช้กดยกเลิก
-        path = os.path.join(os.getcwd(),self.parent_folder, self.project_name)
-
+            return
+        
+        path = os.path.join(os.getcwd(), self.parent_folder, str(self.student_id), self.project_name)
         os.makedirs(path, exist_ok=True)
         shutil.copy(file_path, path)
-
         self.label.config(text=f"อัปโหลดไฟล์: {os.path.basename(file_path)} เสร็จสิ้น")
         print(f"ไฟล์ {os.path.basename(file_path)} ถูกอัปโหลดไปที่ {path}")
 
 #จัดการไฟล์
 class ProjectFileManager:
-    def __init__(self, project_name, file_name, parent_folder="Project_list"):
+    def __init__(self, project_name, student_id, file_name=None, parent_folder="Project_list"):
         self.project_name = project_name
+        self.student_id = student_id
         self.file_name = file_name
         self.parent_folder = parent_folder
 
     def delete_project_folder(self):
-        path = os.path.join(self.parent_folder, self.project_name)
+        """ลบโฟลเดอร์โปรเจค (รองรับโครงสร้างใหม่)"""
+        path = os.path.join(self.parent_folder, str(self.student_id), self.project_name)
         if os.path.exists(path) and os.path.isdir(path):
             shutil.rmtree(path)
-            print(f"ลบโฟลเดอร์ {self.project_name} เรียบร้อยแล้ว")
+            print(f"ลบโฟลเดอร์โปรเจค {self.project_name} ของนักศึกษา {self.student_id} เรียบร้อยแล้ว")
         else:
-            print(f"ไม่พบโฟลเดอร์ของโครงการ {self.project_name}")
+            print(f"ไม่พบโฟลเดอร์ของโปรเจค {self.project_name}")
 
-   
     def delete_file_in_project(self):
         files = self.list_files_in_project()
         if not files:
@@ -361,7 +402,7 @@ class ProjectFileManager:
             choice = int(input("เลือกหมายเลขไฟล์ที่ต้องการลบ: "))
             if 1 <= choice <= len(files):
                 selected_file = files[choice - 1]
-                file_path = os.path.join(self.parent_folder, self.project_name, selected_file)
+                file_path = os.path.join(self.parent_folder, str(self.student_id), self.project_name, selected_file)
                 send2trash(file_path)
                 print(f"ลบไฟล์ {selected_file} ในโครงการ {self.project_name} เรียบร้อยแล้ว")
             else:
@@ -370,13 +411,14 @@ class ProjectFileManager:
             print("กรุณาใส่ตัวเลขเท่านั้น")
 
     def list_files_in_project(self):
-        folder_path = os.path.join(self.parent_folder, self.project_name)
+        folder_path = os.path.join(self.parent_folder, str(self.student_id), self.project_name)
+        
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
             files = os.listdir(folder_path)
             if files:
-                print(f"ไฟล์ทั้งหมดในโครงการ {self.project_name}:")
+                print(f"ไฟล์ทั้งหมดในโปรเจค {self.project_name}:")
                 for i, f in enumerate(files, start=1):
-                    print(f"{i} {f}")
+                    print(f"[{i}] {f}")
                 return files
             else:
                 print(f"โครงการ {self.project_name} ยังไม่มีไฟล์")
@@ -386,37 +428,27 @@ class ProjectFileManager:
             return None
     
     def rename_project_folder(self,new_folder_name):
-        """เปลี่ยนชื่อโฟลเดอร์โปรเจค"""
-        # แสดงชื่อโฟลเดอร์ปัจจุบัน
-        current_path = os.path.join(self.parent_folder, self.project_name)
+        """เปลี่ยนชื่อโฟลเดอร์โปรเจค (รองรับโครงสร้างใหม่)"""
+        current_path = os.path.join(self.parent_folder, str(self.student_id), self.project_name)
         
-        # เช็คว่าโฟลเดอร์มีอยู่จริงหรือไม่
+        # เช็ควว่าโฟลเดอร์มีอยู่จริงหรือไม่
         if not os.path.exists(current_path) or not os.path.isdir(current_path):
-            print(f"ไม่พบโฟลเดอร์ของโครงการ '{self.project_name}'")
+            print(f"ไม่พบโฟลเดอร์ของโปรเจค '{self.project_name}' ของนักศึกษา {self.student_id}")
             return False
         
-        # print(f"ชื่อโฟลเดอร์ปัจจุบัน: {self.project_name}")
+        print(f"ชื่อโฟลเดอร์ปัจจุบัน: {self.project_name}")
         
-        # # รับชื่อโฟลเดอร์ใหม่
-        # new_folder_name = input("ใส่ชื่อโฟลเดอร์ใหม่: ").strip()
-        
-        # # เช็คว่าใส่ชื่อหรือไม่
-        # if not new_folder_name:
-        #     print("กรุณาใส่ชื่อโฟลเดอร์")
-        #     return False
-        
-        # เช็คชื่อที่ไม่ควรใช้
+        # เช็คชื่อที่ไม่ถูกต้อง
         invalid_chars = '<>:"/\\|?*'
         if any(char in new_folder_name for char in invalid_chars):
             print(f"ชื่อโฟลเดอร์ไม่ควรมีตัวอักษรพิเศษ: {invalid_chars}")
             return False
         
-        # สร้างเส้นทางใหม่
-        new_path = os.path.join(self.parent_folder, new_folder_name)
+        new_path = os.path.join(self.parent_folder, str(self.student_id), new_folder_name)
         
-        # เช็คว่าชื่อโฟลเดอร์ใหม่ซ้ำหรือไม่
+        # เช็ควว่าชื่อโฟลเดอร์ใหม่ซ้ำหรือไม่
         if os.path.exists(new_path):
-            print(f"มีโฟลเดอร์ชื่อ '{new_folder_name}' อยู่แล้ว")
+            print(f"มีโฟลเดอร์ชื่อ '{new_folder_name}' อยู่แล้วในโฟลเดอร์ของนักศึกษา {self.student_id}")
             return False
         
         try:
@@ -434,18 +466,18 @@ class ProjectFileManager:
 
 #เรียกใช้งาน
 def main():
+    #สร้างฐานข้อมูล
     db = Database()
     dbm = Database_manager()
     while True:
-         #สร้างฐานข้อมูล
         action = input(
             "---------------------------------------- \n"
             "ระบบจัดเก็บไฟล์โครงการของนักศึกษา \n"            
-            "[1] เพิ่มข้อมูลนักศึกษา \n"   #(ชื่อ รหัสนักศึกษา )
-            "[2] เพิ่มโครงการใหม่ \n"                  #( [ ลงในที่สร้างจาก 1 ] ใส่แค่ชื่อโปคเจค รายะเอียด ปี)
-            "[3] จัดการไฟล์ \n"                         #(เลือกโครงการที่สร้างจาก 2 แล้วเพิ่มไฟล์เข้าไป)                         
+            "[1] เพิ่มข้อมูลนักศึกษา \n"   
+            "[2] เพิ่มโครงการใหม่ \n"                  
+            "[3] จัดการไฟล์ \n"                                    
             "[4] แก้ไขข้อมูล \n"                          
-            "[5] ค้นหาข้อมูลโครงการ \n"            #(แสดงชื่อโครงการ ชื่อเจ้าของโครงการ รหัสนักศึกษา Email ปี)
+            "[5] ค้นหาข้อมูลโครงการ \n"            
             "[6] เรียกดูไฟล์โครงการ\n"
             "[7] ตัวเลือกแอดมิน \n"
             "[8] ยกเลิก \n"
@@ -458,42 +490,52 @@ def main():
             continue
 
         if action == '1':
-            print("-"*40)
-            # NewStudent = Student()
-            # StudentData = Database_manager()
+            while True:
+                print("-"*40)
+                input_name = input("ใส่ชื่อ-นามสกุล: ").strip()
+                if input_name == "":
+                    print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                    continue
 
-            input_name = input("ใส่ชื่อ นามสกุล: ").strip()
+                input_student_id = input("ใส่รหัสนักศึกษา 13 หลัก: ").strip()
+                if input_student_id == "":
+                    print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                    continue
 
-            input_student_id = input("ใส่รหัสนักศึกษา: ").strip()
-            if not input_student_id.isdigit() or not len(input_student_id) == 13:
-                print("กรุณาใส่รหัสนักศึกษาให้ครบ 13 หลัก")
-                continue
+                if not input_student_id.isdigit() or not len(input_student_id) == 13:
+                    print("กรุณาใส่รหัสนักศึกษาให้ครบ 13 หลัก")
+                    continue
 
-            input_email = input("ใส่อีเมล: ").strip()
+                input_email = input("ใส่อีเมล: ").strip()
+                if input_email == "":
+                    print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                    continue
 
-            NewStudent = Student(db,input_name, input_student_id, input_email)
-            
-            if NewStudent.check_student_id():
-                print("รหัสนักศึกษานี้มีอยู่แล้ว")
-                continue
-            if not NewStudent.is_valid_email():
-                print("รูปแบบอีเมลไม่ถูกต้อง")
-                continue
-            if NewStudent.check_email():
-                print("Email นี้มีอยู่แล้ว")
-                continue
+                NewStudent = Student(db,input_name, input_student_id, input_email)
+                
+                if NewStudent.check_student_id():
+                    print("รหัสนักศึกษานี้มีอยู่แล้ว")
+                    continue
+                if not NewStudent.is_valid_email():
+                    print("รูปแบบอีเมลไม่ถูกต้อง")
+                    continue
+                if NewStudent.check_email():
+                    print("Email นี้มีอยู่แล้ว")
+                    continue
 
-            NewStudent.New_Student()
-            dbm.fetch_AllStudents()
+                NewStudent.New_Student()
+                dbm.fetch_AllStudents()
+                break
 
         elif action == '2':
             while True:
                 print("-"*40)
-                # NewProject = Project()
-                # ProjectData = Database_manager()
-                # check = Student(db)
 
-                input_student_id2 = input("Enter Student ID4: ").strip()
+                input_student_id2 = input("ใส่รหัสนักศึกษา 13 หลัก หรือ 4 ตัวท้าย: ").strip()
+                if input_student_id2 == "":
+                    print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                    continue
+
                 if not input_student_id2.isdigit():
                     print("กรุณาใส่รหัสนักศึกษาเป็นตัวเลข")
                     continue
@@ -518,15 +560,26 @@ def main():
                     continue
 
                 input_student_name = get_student_name
-                input_project_name = input("Enter Project Name: ").strip() 
+                input_project_name = input("ใส่ชื่อโครงการ: ").strip()
+                if input_project_name == "":
+                    print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                    continue 
+
                 check_project = Project(db,input_project_name,None,None,None )
                 check_project.check_Project_name()
                 if check_project.check_Project_name(): 
-                    print("Project นี้มีอยู่แล้ว")
+                    print(f"โครงการ {input_project_name} มีอยู่แล้ว")
                     continue
 
-                input_description = input("Enter Project Description: ").strip()
-                input_year = input("Enter Academic Year: ").strip()
+                input_description = input("ใส่รายละเอียดโครงการ: ").strip()
+                if input_description == "":
+                    print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                    continue 
+
+                input_year = input("ใส่ปีการศึกษา: ").strip()
+                if input_year == "":
+                    print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                    continue
 
                 student = Student(db, input_student_name, student_id, None) 
                 NewProject = Project(db,input_project_name, input_description, input_year, student)
@@ -537,9 +590,6 @@ def main():
 
         elif action == '3':
             while True:
-                # show_Projects_info = Database_manager()
-                # CheckProject = Project()
-                # ManageFile = ProjectFileManager()
                 managefile_action = input(
                     "---------------------------------------- \n"
                     "เลือกรายการที่ต้องการ \n"
@@ -554,8 +604,10 @@ def main():
                         continue
                 
                 if managefile_action == '1': 
-                    # dbm.fetch_AllProjects()
                     input_id_student1 = input("ใส่รหัสนักศึกษา 13 หลัก หรือ 4 ตัวท้าย: ").strip()
+                    if input_id_student1 == "":
+                        print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                        continue
                     if not input_id_student1.isdigit():
                         print("กรุณาใส่รหัสนักศึกษาเป็นตัวเลข")
                         continue
@@ -565,14 +617,20 @@ def main():
                         print("กรุณาใส่รหัสนักศึกษาให้ครบ 13 หลัก หรือ 4 ตัวท้าย")
                         continue
                     pj_namee = dbm.get_all_Project_by_sid(input_id_student1)
-                    check = Project(db,pj_namee,None,None,None)
+                    student_id = dbm.get_student_id_by_project_name(pj_namee)  # ดึง student_id
+                    
+                    check = Project(db, pj_namee, None, None, None)
                     if not check.check_Project_name():
-                        print(f"ไม่พบโครงการ {pj_namee} ในระบบ")
+                        print(f"ไม่พบโปรเจค {pj_namee} ในระบบ")
                         continue
-                    UploadFile(pj_namee)
+                    
+                    UploadFile(pj_namee, student_id)
 
                 elif managefile_action == '2':
                     input_id_student2 = input("กรุณาใส่รหัสนักศึกษา 13 หลัก หรือ 4 ตัวท้าย: ").strip()
+                    if input_id_student2 == "":
+                        print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                        continue
                     if not input_id_student2.isdigit():
                         print("กรุณาใส่รหัสนักศึกษาเป็นตัวเลข")
                         continue
@@ -582,8 +640,9 @@ def main():
                         print("กรุณาใส่รหัสนักศึกษา 13 หลัก หรือ 4 ตัวท้าย")
                         continue
                     pj_namee = dbm.get_all_Project_by_sid(input_id_student2)
-                    delete = ProjectFileManager(pj_namee, None)
-                    # delete.list_files_in_project()
+                    student_id = dbm.get_student_id_by_project_name(pj_namee)  # ดึง student_id
+                    
+                    delete = ProjectFileManager(pj_namee, student_id)
                     delete.delete_file_in_project()
 
                 elif managefile_action == '3':
@@ -610,6 +669,9 @@ def main():
                     if edit_action == '1':
                         print("-"*40)
                         sid = input("ใส่รหัสนักศึกษา 13 หลัก: ").strip()
+                        if sid == "":
+                            print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                            continue
                         if not sid.isdigit():
                             print("กรุณาใส่รหัสนักศึกษาเป็นตัวเลข")
                             continue
@@ -625,10 +687,21 @@ def main():
                             continue
 
                         dbm.fetch_OneStudent(sid)
-                        # print(dbm.fetch_OneStudent(sid))
-                        new_name = input("Enter new Student Name: ").strip()
-                        new_id = input("Enter new Student ID: ").strip()    
-                        new_email = input("Enter new Student Email: ").strip()
+                        new_name = input("ใส่ชื่อ-นามสกุลใหม่: ").strip()
+                        if new_name == "":
+                            print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                            continue
+
+                        new_id = input("ใส่รหัสนักศึกษาใหม่: ").strip()
+                        if new_id == "":
+                            print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                            continue
+
+                        new_email = input("ใส่อีเมลนักศึกษาใหม่: ").strip()
+                        if new_email == "":
+                            print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                            continue
+
                         new = Student(db,new_name,new_id,new_email)
 
 
@@ -643,13 +716,15 @@ def main():
                             continue
 
                         admin.update_Student_Data(new_name, new_id, new_email, sid)
-                        # dbm.fetch_OneStudent(new_id)
                         if admin.update_Student_Data:
                             print("อัปเดตข้อมูลนักศึกษาเรียบร้อยแล้ว")
 
                     elif edit_action == '2':
                         print("-"*40)
                         sid = input("ใส่รหัสนักศึกษา 13 หลัก หรือ 4 ตัวท้าย: ").strip()
+                        if sid == "":
+                            print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                            continue
                         if not sid.isdigit():
                             print("กรุณาใส่รหัสนักศึกษาเป็นตัวเลข")
                             continue
@@ -664,28 +739,49 @@ def main():
                             print("ไม่พบรหัสนักศึกษานี้ในระบบ")
                             continue
                         pj_namee = dbm.get_all_Project_by_sid(sid)
+                        student_id = dbm.get_student_id_by_project_name(pj_namee)
+                        
                         dbm.search_project(pj_namee)
-                        input_new_project_name = input("Enter new Project Name: ").strip()
-                        input_new_description = input("Enter new Description: ").strip()
-                        input_new_year = input("Enter new Year: ").strip()
-                        admin.update_Project_Data(input_new_project_name, input_new_description, input_new_year,pj_namee)
-                        rename = ProjectFileManager(pj_namee, None)
-                        rename.rename_project_folder(input_new_project_name)
-                        print("อัปเดตข้อมูลโครงการเรียบร้อยแล้ว")
+                        input_new_project_name = input("ใส่ชื่อโครงการใหม่: ").strip()
+                        if input_new_project_name == "":
+                            print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                            continue
 
+                        input_new_description = input("ใส่รายละเอียดโครงการใหม่: ").strip()
+                        if input_new_description == "":
+                            print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                            continue
+
+                        input_new_year = input("ใส่ปีการศึกษาใหม่: ").strip()
+                        if input_new_year == "":
+                            print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                            continue
+                        
+                        # อัปเดต database
+                        admin.update_Project_Data(input_new_project_name, input_new_description, input_new_year, pj_namee)
+                        
+                        # เปลี่ยนชื่อโฟลเดอร์ด้วย
+                        rename = ProjectFileManager(pj_namee, student_id)  # ส่ง student_id ด้วย
+                        rename.rename_project_folder(input_new_project_name)
+                        
                     elif edit_action == '3':
                         print("ออกจากโหมดแอดมิน")
                         break
 
         elif action == '5':
             print("-"*40)
-            input_keyword = input("ใส่ชื่อโครงการ หรือ รหัสนักศึกษา  : ").strip()
+            input_keyword = input("ใส่ชื่อโครงการ หรือ รหัสนักศึกษา(13 หลัก หรือ 4 ตัวท้าย)  : ").strip()
+            if input_keyword == "":
+                print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                continue
             dbm.search_project(input_keyword)
 
         elif action == '6':
             print("-"*40)
-            # Search = Database_manager()
             sid = input("ใส่รหัสนักศึกษา 13 หลัก หรือ 4 ตัวท้าย: ").strip()
+            if sid == "":
+                print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                continue
             if not sid.isdigit():
                 print("กรุณาใส่รหัสนักศึกษาเป็นตัวเลข")
                 continue
@@ -700,14 +796,19 @@ def main():
                 print("ไม่พบรหัสนักศึกษานี้ในระบบ")
                 continue
             pj_namee = dbm.get_all_Project_by_sid(sid)
-            dbm.open_project_file(pj_namee)
+            student_id = dbm.get_student_id_by_project_name(pj_namee)
+            
+            dbm.open_project_file(pj_namee, student_id)
 
         elif action == '7':
             input_PIN = input("Enter Admin PIN: ").strip()
+            if input_PIN == "":
+                print("กรุณาใส่ข้อมูล ห้ามเว้นว่าง")
+                continue
+
             admin = Admin(db)
             if admin.check_pin(input_PIN):
                 while True:
-                    # admin1 = Database_manager()
                     admin_action = input(
                         "---------------------------------------- \n"
                         "เลือกรายการที่ต้องการแก้ไข \n"
@@ -723,8 +824,6 @@ def main():
 
                     elif admin_action == '1':
                         print("-"*40)
-                        # admin1 = Database_manager()
-                        # admin2 = Admin()
                         dbm.fetch_AllStudents()
                         input_id3 = input("Select ID to Delete: ").strip()
                         admin.Delete_Student_data(input_id3)
@@ -733,40 +832,25 @@ def main():
 
                     elif admin_action == '2':
                         print("-"*40)
-                        # admin1 = Database_manager()
-                        # admin2 = Admin()
                         dbm.fetch_AllProjects()
                         input_id4 = input("Select ID to Delete: ").strip()
                         delete_project_name = dbm.get_Projectinfo_by_id(input_id4)
-                        # delete_project_name = project_info
                         admin.Delete_Project_data(input_id4)
-                        # admin3.delete_project_folder(delete_project_name)
                         dbm.fetch_AllProjects()
                         print(f"ลบข้อมูลกับโฟลเดอร์ของโครงการ {delete_project_name} เรียบร้อยแล้ว")
-
-
-
-                        print("-"*40)
-
                     elif admin_action == '3':
+                        print("-"*40)
                         print("ออกจากโหมดแอดมิน")
                         break
 
-                    # else:
-                    #     print("Error: กรุณาเลือกรายการให้ถูกต้อง")
             else:
                 print("รหัสผ่านไม่ถูกต้อง")
                 continue
 
         elif action == '8':
-
             print("-"*40)
             print("จบการทำงาน")
             break
-
-        # else:
-        #     print("เกิดข้อผิดพลาด กรุณาลองใหม่")
-
 
 if __name__ == "__main__":
     main()
